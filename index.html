@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Mappa Capanni di Caccia – Bassa Valle Camonica</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+  <style>
+    :root {
+      --bg-panel: #ffffff;
+      --bg-subtle: #f4f6f4;
+      --text-main: #1b261e;
+      --text-muted: #55665a;
+      --accent: #2d5a3c;
+      --accent-hover: #21442d;
+      --border: #dce3de;
+      --badge-bg: #e6efe9;
+      --danger: #c0392b;
+      --warning: #d97706;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+    body, html { height: 100%; width: 100%; overflow: hidden; background: #e5e9e6; color: var(--text-main); }
+    #app { display: flex; height: 100vh; width: 100vw; position: relative; }
+    
+    /* Sidebar */
+    #sidebar {
+      width: 360px;
+      max-width: 90vw;
+      background: var(--bg-panel);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      z-index: 1000;
+      box-shadow: 2px 0 12px rgba(0,0,0,0.08);
+      transition: transform 0.25s ease;
+    }
+    #sidebar.collapsed {
+      transform: translateX(-100%);
+      position: absolute;
+      height: 100%;
+    }
+    .header {
+      padding: 16px 18px;
+      background: var(--accent);
+      color: #fff;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .header h1 { font-size: 1.05rem; font-weight: 700; letter-spacing: 0.2px; }
+    .header p { font-size: 0.78rem; opacity: 0.88; margin-top: 2px; }
+    
+    .controls {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-subtle);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .control-group { display: flex; flex-direction: column; gap: 4px; }
+    .control-group label { font-size: 0.75rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.4px; }
+    input[type="text"], select {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 0.9rem;
+      background: #fff;
+      color: var(--text-main);
+    }
+    input[type="text"]:focus, select:focus { outline: 2px solid var(--accent); border-color: transparent; }
+
+    .toggles {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 2px;
+    }
+    .toggle-btn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.8rem;
+      font-weight: 500;
+      padding: 6px 8px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: #fff;
+      cursor: pointer;
+      user-select: none;
+    }
+    .toggle-btn input { accent-color: var(--accent); cursor: pointer; }
+    .dot-100 { width: 10px; height: 10px; border-radius: 50%; background: rgba(217, 119, 6, 0.35); border: 1.5px solid #d97706; display: inline-block; }
+    .dot-200 { width: 10px; height: 10px; border-radius: 50%; background: rgba(192, 57, 43, 0.25); border: 1.5px solid #c0392b; display: inline-block; }
+
+    .stats-bar {
+      padding: 8px 16px;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #fff;
+    }
+    .badge {
+      background: var(--badge-bg);
+      color: var(--accent);
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 0.78rem;
+    }
+
+    /* List */
+    #list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px;
+    }
+    .item {
+      padding: 10px 12px;
+      border-radius: 6px;
+      border: 1px solid transparent;
+      cursor: pointer;
+      transition: background 0.15s;
+      margin-bottom: 4px;
+    }
+    .item:hover { background: var(--bg-subtle); border-color: var(--border); }
+    .item-top { display: flex; justify-content: space-between; align-items: center; }
+    .item-code { font-weight: 700; font-size: 0.92rem; color: var(--accent); }
+    .item-comune { font-size: 0.72rem; font-weight: 600; background: var(--bg-subtle); padding: 2px 6px; border-radius: 4px; color: var(--text-muted); }
+    .item-loc { font-size: 0.84rem; color: var(--text-main); margin-top: 3px; }
+    .item-coords { font-size: 0.74rem; color: var(--text-muted); margin-top: 2px; font-family: monospace; }
+
+    /* Map */
+    #map-container { flex: 1; position: relative; height: 100%; }
+    #map { height: 100%; width: 100%; }
+
+    #toggle-sidebar-btn {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      z-index: 999;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 12px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-main);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    #locate-btn {
+      position: absolute;
+      bottom: 24px;
+      right: 12px;
+      z-index: 999;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 9px 12px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--accent);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+      cursor: pointer;
+    }
+    #locate-btn:hover, #toggle-sidebar-btn:hover { background: var(--bg-subtle); }
+
+    /* Custom Marker & Tooltip */
+    .capanno-icon {
+      background: #2d5a3c;
+      border: 2px solid #ffffff;
+      border-radius: 50%;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.45);
+    }
+    .capanno-label {
+      background: rgba(255, 255, 255, 0.92);
+      border: 1px solid #2d5a3c;
+      border-radius: 4px;
+      padding: 1px 5px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #1b261e;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    }
+    .popup-title { font-weight: 700; font-size: 0.95rem; color: #2d5a3c; margin-bottom: 4px; }
+    .popup-row { font-size: 0.84rem; margin-bottom: 3px; }
+    .popup-link {
+      display: inline-block;
+      margin-top: 6px;
+      padding: 5px 9px;
+      background: #2d5a3c;
+      color: #fff !important;
+      text-decoration: none;
+      border-radius: 4px;
+      font-size: 0.78rem;
+      font-weight: 600;
+    }
+
+    @media (max-width: 700px) {
+      #sidebar { position: absolute; height: 100%; }
+    }
+  </style>
+</head>
+<body>
+<div id="app">
+  <aside id="sidebar">
+    <div class="header">
+      <div>
+        <h1>Appostamenti Fissi (Capanni)</h1>
+        <p>Darfo, Angolo, Gianico, Pian Camuno, Artogne, Esine</p>
+      </div>
+      <button id="close-sidebar" style="background:none;border:none;color:#fff;font-size:1.3rem;cursor:pointer;" title="Chiudi pannello">&times;</button>
+    </div>
+
+    <div class="controls">
+      <div class="control-group">
+        <label for="comune-select">Filtra per Comune</label>
+        <select id="comune-select">
+          <option value="ALL">Tutti i 6 comuni (188)</option>
+          <option value="ESINE">Esine (49)</option>
+          <option value="DARFO BOARIO TERME">Darfo Boario Terme (43)</option>
+          <option value="ARTOGNE">Artogne (34)</option>
+          <option value="ANGOLO TERME">Angolo Terme (25)</option>
+          <option value="GIANICO">Gianico (22)</option>
+          <option value="PIAN CAMUNO">Pian Camuno (15)</option>
+        </select>
+      </div>
+
+      <div class="control-group">
+        <label for="search-input">Cerca Codice o Località</label>
+        <input type="text" id="search-input" placeholder="Es. 93510, Prave, Montecampione..." />
+      </div>
+
+      <div class="control-group">
+        <label>Livelli Ausiliari</label>
+        <div class="toggles">
+          <label class="toggle-btn">
+            <input type="checkbox" id="toggle-100m" />
+            <span class="dot-100"></span> Raggio 100 m
+          </label>
+          <label class="toggle-btn">
+            <input type="checkbox" id="toggle-200m" />
+            <span class="dot-200"></span> Raggio 200 m
+          </label>
+          <label class="toggle-btn" style="grid-column: span 2;">
+            <input type="checkbox" id="toggle-labels" />
+            Mostra codici etichetta su mappa
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <div class="stats-bar">
+      <span>Capanni visualizzati</span>
+      <span class="badge" id="count-badge">188</span>
+    </div>
+
+    <div id="list"></div>
+  </aside>
+
+  <main id="map-container">
+    <button id="toggle-sidebar-btn">&#9776; Elenco e Filtri</button>
+    <button id="locate-btn">&#8982; La mia posizione</button>
+    <div id="map"></div>
+  </main>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<script>
+  // Dati dei 188 capanni estratti e puliti per i 6 comuni
+  const CAPANNI_DATA = [{"c":"101666","m":"ANGOLO TERME","l":"COLINE PRAVE","lat":45.935208,"lon":10.133088},{"c":"105307","m":"ANGOLO TERME","l":"PLAGNE TRAVERSERE","lat":45.87838,"lon":10.128505},{"c":"10816","m":"ANGOLO TERME","l":"SORLINA","lat":45.885721,"lon":10.161076},{"c":"17607","m":"ANGOLO TERME","l":"DOSSO DI PRAVE-MAPP.1587","lat":45.928683,"lon":10.128546},{"c":"17607","m":"ANGOLO TERME","l":"PRAVE","lat":45.931433,"lon":10.125708},{"c":"21995","m":"ANGOLO TERME","l":"COLLE DI VARENO","lat":45.90055,"lon":10.10851},{"c":"23372","m":"ANGOLO TERME","l":"FAIT","lat":45.919725,"lon":10.139736},{"c":"26249","m":"ANGOLO TERME","l":"FRASSINE'","lat":45.906411,"lon":10.120066},{"c":"2841","m":"ANGOLO TERME","l":"COSTA SECCHI","lat":45.933762,"lon":10.123486},{"c":"28585","m":"ANGOLO TERME","l":"VARENO","lat":45.89836,"lon":10.11012},{"c":"29863","m":"ANGOLO TERME","l":"DOS STABOI","lat":45.921446,"lon":10.149241},{"c":"31841","m":"ANGOLO TERME","l":"PRAVE","lat":45.937149,"lon":10.126079},{"c":"37531","m":"ANGOLO TERME","l":"DOSSO S.GIOVANNI","lat":45.921756,"lon":10.152341},{"c":"48504","m":"ANGOLO TERME","l":"PRAVE","lat":45.931869,"lon":10.124316},{"c":"54431","m":"ANGOLO TERME","l":"MOIA","lat":45.885011,"lon":10.153646},{"c":"84662","m":"ANGOLO TERME","l":"ROCCOLO","lat":45.882346,"lon":10.144025},{"c":"8516","m":"ANGOLO TERME","l":"RUOTA","lat":45.891368,"lon":10.164031},{"c":"90493","m":"ANGOLO TERME","l":"COLLE VARENO","lat":45.90143,"lon":10.11079},{"c":"91715","m":"ANGOLO TERME","l":"BOTTA DI ANFURRO","lat":45.887142,"lon":10.129289},{"c":"91721","m":"ANGOLO TERME","l":"PAROSSO","lat":45.884606,"lon":10.143874},{"c":"92111","m":"ANGOLO TERME","l":"VARENO","lat":45.895895,"lon":10.109281},{"c":"97140","m":"ANGOLO TERME","l":"SESSA","lat":45.880283,"lon":10.128864},{"c":"97567","m":"ANGOLO TERME","l":"CRAPA","lat":45.903894,"lon":10.129064},{"c":"99143","m":"ANGOLO TERME","l":"PRAVE","lat":45.933088,"lon":10.129301},{"c":"99909","m":"ANGOLO TERME","l":"LAZER","lat":45.925498,"lon":10.143529},{"c":"100080","m":"ARTOGNE","l":"ALBERE","lat":45.84993,"lon":10.1893},{"c":"104608","m":"ARTOGNE","l":"MUSOLETTO","lat":45.830164,"lon":10.214001},{"c":"104613","m":"ARTOGNE","l":"MULINO","lat":45.834629,"lon":10.18668},{"c":"15682","m":"ARTOGNE","l":"DOSSO SUPERIORE","lat":45.835938,"lon":10.174467},{"c":"16253","m":"ARTOGNE","l":"CANTER","lat":45.83252,"lon":10.17545},{"c":"16271","m":"ARTOGNE","l":"MOE","lat":45.83137,"lon":10.1855},{"c":"16340","m":"ARTOGNE","l":"PRATO SECONDINO","lat":45.830852,"lon":10.216934},{"c":"19379","m":"ARTOGNE","l":"RIVE","lat":45.857835,"lon":10.176491},{"c":"2218","m":"ARTOGNE","l":"LUNGHI","lat":45.842962,"lon":10.170396},{"c":"2218","m":"ARTOGNE","l":"BASSINALE","lat":45.834708,"lon":10.236454},{"c":"28387","m":"ARTOGNE","l":"ALBERE","lat":45.84992,"lon":10.18668},{"c":"34366","m":"ARTOGNE","l":"PRATO SECONDINO","lat":45.835446,"lon":10.224893},{"c":"35868","m":"ARTOGNE","l":"PATEGHE","lat":45.830726,"lon":10.194861},{"c":"39770","m":"ARTOGNE","l":"PLAGNA PATEGHE","lat":45.832649,"lon":10.193809},{"c":"39775","m":"ARTOGNE","l":"PLAGNA","lat":45.832763,"lon":10.196695},{"c":"43497","m":"ARTOGNE","l":"SERE","lat":45.844206,"lon":10.199384},{"c":"43497","m":"ARTOGNE","l":"MANGERINO","lat":45.84167,"lon":10.20216},{"c":"47061","m":"ARTOGNE","l":"STALLA ERCOLE","lat":45.856002,"lon":10.152357},{"c":"47061","m":"ARTOGNE","l":"STALLO D'ERCOLE","lat":45.856845,"lon":10.149772},{"c":"497","m":"ARTOGNE","l":"FONTANELLO","lat":45.823856,"lon":10.206036},{"c":"77762","m":"ARTOGNE","l":"MUGOLETTO","lat":45.833617,"lon":10.209442},{"c":"80504","m":"ARTOGNE","l":"PISCINE","lat":45.82592,"lon":10.1974},{"c":"81729","m":"ARTOGNE","l":"TESE","lat":45.840792,"lon":10.198666},{"c":"81856","m":"ARTOGNE","l":"BROCCA SECCA","lat":45.83359,"lon":10.214036},{"c":"82221","m":"ARTOGNE","l":"DOSSO DI SOTTO","lat":45.837504,"lon":10.170663},{"c":"82221","m":"ARTOGNE","l":"VALLE BASSINALETTO","lat":45.838356,"lon":10.22735},{"c":"87203","m":"ARTOGNE","l":"PATEGHE","lat":45.829246,"lon":10.192671},{"c":"90275","m":"ARTOGNE","l":"PRATO SECONDINO","lat":45.838233,"lon":10.216727},{"c":"93510","m":"ARTOGNE","l":"PRATO SECONDINO","lat":45.834169,"lon":10.224396},{"c":"93510","m":"ARTOGNE","l":"BROCCA SECCA","lat":45.835385,"lon":10.220686},{"c":"93510","m":"ARTOGNE","l":"PRATO SECONDINO-2020-","lat":45.837345,"lon":10.215619},{"c":"93976","m":"ARTOGNE","l":"PRATO SECONDINO","lat":45.833345,"lon":10.214775},{"c":"96135","m":"ARTOGNE","l":"FONTANELLI","lat":45.8441,"lon":10.21336},{"c":"96135","m":"ARTOGNE","l":"FONTANELLI","lat":45.84637,"lon":10.20963},{"c":"104609","m":"DARFO BOARIO TERME","l":"DOSSO ROGNONE MAPP.254","lat":45.87869,"lon":10.23054},{"c":"11496","m":"DARFO BOARIO TERME","l":"PLAGNA","lat":45.868009,"lon":10.21076},{"c":"13600","m":"DARFO BOARIO TERME","l":"STAL DELL'ORA","lat":45.867645,"lon":10.236158},{"c":"13798","m":"DARFO BOARIO TERME","l":"GRAS CAUDEL","lat":45.869925,"lon":10.238965},{"c":"14589","m":"DARFO BOARIO TERME","l":"MANTICOLO","lat":45.902552,"lon":10.205176},{"c":"14950","m":"DARFO BOARIO TERME","l":"DOSSO ROGNONE","lat":45.879191,"lon":10.233209},{"c":"15027","m":"DARFO BOARIO TERME","l":"PAZZA LA NERA","lat":45.861274,"lon":10.242473},{"c":"17069","m":"DARFO BOARIO TERME","l":"DOSSO ROGNONE","lat":45.877499,"lon":10.227131},{"c":"17505","m":"DARFO BOARIO TERME","l":"PLAGNA DOSSO ROGNONE","lat":45.877444,"lon":10.232419},{"c":"19186","m":"DARFO BOARIO TERME","l":"CASTAGNETO M. 3024","lat":45.879067,"lon":10.196463},{"c":"19330","m":"DARFO BOARIO TERME","l":"STIBEL","lat":45.87279,"lon":10.22535},{"c":"19379","m":"DARFO BOARIO TERME","l":"CAUZZO","lat":45.863877,"lon":10.24107},{"c":"20192","m":"DARFO BOARIO TERME","l":"CAUSSO","lat":45.866058,"lon":10.235226},{"c":"20468","m":"DARFO BOARIO TERME","l":"PIAZZA LA NERA","lat":45.859784,"lon":10.247194},{"c":"20492","m":"DARFO BOARIO TERME","l":"CERVERA","lat":45.856673,"lon":10.233261},{"c":"21690","m":"DARFO BOARIO TERME","l":"SALETTI","lat":45.906195,"lon":10.216975},{"c":"28811","m":"DARFO BOARIO TERME","l":"CERVERA","lat":45.857783,"lon":10.237281},{"c":"3605","m":"DARFO BOARIO TERME","l":"CAUZZO","lat":45.86637,"lon":10.243407},{"c":"45091","m":"DARFO BOARIO TERME","l":"GADOI","lat":45.898574,"lon":10.182693},{"c":"48494","m":"DARFO BOARIO TERME","l":"CORNI PISAGNOCCHI","lat":45.868819,"lon":10.215485},{"c":"53561","m":"DARFO BOARIO TERME","l":"SELVE","lat":45.912717,"lon":10.158365},{"c":"5916","m":"DARFO BOARIO TERME","l":"SALETTI","lat":45.90177,"lon":10.21016},{"c":"70907","m":"DARFO BOARIO TERME","l":"PALTRESSIMO","lat":45.89453,"lon":10.163735},{"c":"70913","m":"DARFO BOARIO TERME","l":"BONOTE","lat":45.911309,"lon":10.204971},{"c":"70922","m":"DARFO BOARIO TERME","l":"DOSSO SABBIONE","lat":45.878063,"lon":10.200998},{"c":"71015","m":"DARFO BOARIO TERME","l":"PIANI LUNGHI E LARGHI","lat":45.872887,"lon":10.197848},{"c":"77687","m":"DARFO BOARIO TERME","l":"RUC","lat":45.87083,"lon":10.16755},{"c":"77710","m":"DARFO BOARIO TERME","l":"STIBLEL","lat":45.8721,"lon":10.22286},{"c":"86278","m":"DARFO BOARIO TERME","l":"DOSSO ROGNONE","lat":45.87638,"lon":10.23032},{"c":"90375","m":"DARFO BOARIO TERME","l":"LAGO MORO-MIRABELLA","lat":45.877916,"lon":10.160462},{"c":"92250","m":"DARFO BOARIO TERME","l":"DOSSO ORTICARIO","lat":45.873611,"lon":10.228921},{"c":"93105","m":"DARFO BOARIO TERME","l":"PIAZZA LA NERA","lat":45.861336,"lon":10.244532},{"c":"93510","m":"DARFO BOARIO TERME","l":"FONTANELLI BOTTO","lat":45.89306,"lon":10.21407},{"c":"93510","m":"DARFO BOARIO TERME","l":"BERSAGLIO","lat":45.88056,"lon":10.203},{"c":"93965","m":"DARFO BOARIO TERME","l":"COSTONE CORNO CERIALE","lat":45.880991,"lon":10.230361},{"c":"93969","m":"DARFO BOARIO TERME","l":"PLAGNINA-MOIA","lat":45.873809,"lon":10.197874},{"c":"93969","m":"DARFO BOARIO TERME","l":"STIBLEL MAPP.2529","lat":45.870579,"lon":10.22513},{"c":"94632","m":"DARFO BOARIO TERME","l":"INTERCASOLE","lat":45.908192,"lon":10.159283},{"c":"95431","m":"DARFO BOARIO TERME","l":"PIAZZALANERA","lat":45.858524,"lon":10.242832},{"c":"95557","m":"DARFO BOARIO TERME","l":"BARBARA","lat":45.887088,"lon":10.208742},{"c":"96102","m":"DARFO BOARIO TERME","l":"BUDRE","lat":45.907,"lon":10.19769},{"c":"98138","m":"DARFO BOARIO TERME","l":"ROVINE","lat":45.876086,"lon":10.194572},{"c":"99715","m":"DARFO BOARIO TERME","l":"ET- ALLA BASE DOSSO BLU","lat":45.873157,"lon":10.234582},{"c":"100524","m":"ESINE","l":"CIMITERO","lat":45.907201,"lon":10.231921},{"c":"100713","m":"ESINE","l":"PREDU PLAT","lat":45.899476,"lon":10.254325},{"c":"101386","m":"ESINE","l":"CAPEL DE LIGU'","lat":45.892022,"lon":10.25985},{"c":"101685","m":"ESINE","l":"DOS MEDA'","lat":45.90391,"lon":10.25995},{"c":"101690","m":"ESINE","l":"SAIORE","lat":45.90183,"lon":10.24704},{"c":"102412","m":"ESINE","l":"PLAGNA","lat":45.91051,"lon":10.25204},{"c":"103519","m":"ESINE","l":"DOSSO DEI PORTI","lat":45.91052,"lon":10.24277},{"c":"106733","m":"ESINE","l":"RUC","lat":45.918512,"lon":10.231776},{"c":"11476","m":"ESINE","l":"DOS VALENC","lat":45.884774,"lon":10.266754},{"c":"13624","m":"ESINE","l":"CAP","lat":45.881971,"lon":10.262137},{"c":"1398","m":"ESINE","l":"PIANAZZO","lat":45.891269,"lon":10.249698},{"c":"14589","m":"ESINE","l":"DOSSO DELLE PIGNE","lat":45.89162,"lon":10.24618},{"c":"1738","m":"ESINE","l":"DOSSO","lat":45.915062,"lon":10.241992},{"c":"19190","m":"ESINE","l":"SALETTI","lat":45.882008,"lon":10.262099},{"c":"20545","m":"ESINE","l":"PARNIGOL - PARAMOSCA","lat":45.907279,"lon":10.26197},{"c":"22123","m":"ESINE","l":"TEDAMALA","lat":45.880861,"lon":10.255927},{"c":"22123","m":"ESINE","l":"SALVAGNONE","lat":45.90339,"lon":10.26469},{"c":"23310","m":"ESINE","l":"PIANAZZO","lat":45.893062,"lon":10.250617},{"c":"30488","m":"ESINE","l":"SELLE","lat":45.9072,"lon":10.25167},{"c":"32571","m":"ESINE","l":"DOSSO DELL'ASINO","lat":45.881641,"lon":10.269196},{"c":"32571","m":"ESINE","l":"GUILLO","lat":45.900477,"lon":10.24228},{"c":"34394","m":"ESINE","l":"CASTELLO","lat":45.926745,"lon":10.261363},{"c":"34394","m":"ESINE","l":"GRASSO LUNGO","lat":45.88515,"lon":10.270429},{"c":"34394","m":"ESINE","l":"MONTICELLI","lat":45.91435,"lon":10.25651},{"c":"34394","m":"ESINE","l":"MOIA","lat":45.904282,"lon":10.249744},{"c":"3605","m":"ESINE","l":"LAZZARETTO","lat":45.89609,"lon":10.26443},{"c":"36236","m":"ESINE","l":"CASA DEL PRETE","lat":45.88558,"lon":10.260634},{"c":"36236","m":"ESINE","l":"DOSSO DI BOSICO","lat":45.895097,"lon":10.251799},{"c":"47057","m":"ESINE","l":"GRAS VEC DI FOPPOLE","lat":45.889564,"lon":10.276021},{"c":"74322","m":"ESINE","l":"VAL BUNA'","lat":45.91284,"lon":10.24954},{"c":"74322","m":"ESINE","l":"COSTA DEI PALI","lat":45.892033,"lon":10.274965},{"c":"81844","m":"ESINE","l":"VACARET","lat":45.879499,"lon":10.264753},{"c":"81844","m":"ESINE","l":"BOSCHE","lat":45.895227,"lon":10.214449},{"c":"88169","m":"ESINE","l":"CROCE DEL BOSGIOT","lat":45.897753,"lon":10.253927},{"c":"88676","m":"ESINE","l":"BOSCHE","lat":45.896169,"lon":10.213835},{"c":"90375","m":"ESINE","l":"RUGOLA","lat":45.898961,"lon":10.250966},{"c":"94035","m":"ESINE","l":"MONTICELLI DOS DE LA CES","lat":45.917587,"lon":10.257882},{"c":"94740","m":"ESINE","l":"PIANAZZO","lat":45.89017,"lon":10.25316},{"c":"94740","m":"ESINE","l":"COSTARO","lat":45.907402,"lon":10.268864},{"c":"94740","m":"ESINE","l":"VALLE DELL'OPOL","lat":45.8966,"lon":10.23891},{"c":"96109","m":"ESINE","l":"PISCINE","lat":45.904308,"lon":10.273855},{"c":"96258","m":"ESINE","l":"MONTICELLI","lat":45.91573,"lon":10.257515},{"c":"96258","m":"ESINE","l":"BUDEK","lat":45.893683,"lon":10.255363},{"c":"97592","m":"ESINE","l":"RUGOLA","lat":45.90212,"lon":10.25429},{"c":"98120","m":"ESINE","l":"PARAMOSCA","lat":45.906119,"lon":10.26415},{"c":"98328","m":"ESINE","l":"PRATO DI LESCO","lat":45.903659,"lon":10.242681},{"c":"9848","m":"ESINE","l":"GRASSO LUNGO","lat":45.884404,"lon":10.275394},{"c":"9848","m":"ESINE","l":"BOSICO BAITE","lat":45.895219,"lon":10.246556},{"c":"99127","m":"ESINE","l":"BELVEDERE","lat":45.90901,"lon":10.25022},{"c":"102302","m":"GIANICO","l":"PIA DEL STAL","lat":45.853426,"lon":10.224716},{"c":"103061","m":"GIANICO","l":"PIANA LOERA","lat":45.86038,"lon":10.18866},{"c":"103782","m":"GIANICO","l":"ROCCOLO","lat":45.86406,"lon":10.18668},{"c":"15029","m":"GIANICO","l":"NINI","lat":45.870552,"lon":10.163106},{"c":"15041","m":"GIANICO","l":"COLLETTO DI CIMOSCO","lat":45.845685,"lon":10.233535},{"c":"15190","m":"GIANICO","l":"PRATO DEL BOSCO","lat":45.850037,"lon":10.203791},{"c":"15688","m":"GIANICO","l":"CORNELLI","lat":45.860565,"lon":10.181827},{"c":"15695","m":"GIANICO","l":"CASTELLINO","lat":45.849479,"lon":10.217759},{"c":"15695","m":"GIANICO","l":"RONCAZZO","lat":45.854084,"lon":10.207254},{"c":"15695","m":"GIANICO","l":"PRATO - CIAPA","lat":45.852204,"lon":10.202512},{"c":"19150","m":"GIANICO","l":"CAMPELLI","lat":45.84781,"lon":10.219936},{"c":"19330","m":"GIANICO","l":"DOSSO DEL FAGGIO","lat":45.85521,"lon":10.203505},{"c":"28387","m":"GIANICO","l":"LISANDER","lat":45.861477,"lon":10.173372},{"c":"32178","m":"GIANICO","l":"CASINA NUOVA PLAGNOLI","lat":45.853644,"lon":10.211488},{"c":"32178","m":"GIANICO","l":"GROPPETTO CAMPELLI","lat":45.84646,"lon":10.226021},{"c":"32178","m":"GIANICO","l":"POZZA PLAGNOLI","lat":45.85231,"lon":10.209005},{"c":"47061","m":"GIANICO","l":"FERETTI","lat":45.86525,"lon":10.15968},{"c":"56836","m":"GIANICO","l":"PIANA DAICC","lat":45.858529,"lon":10.203605},{"c":"70896","m":"GIANICO","l":"CRAPELA CAMPELLI","lat":45.846279,"lon":10.223401},{"c":"77909","m":"GIANICO","l":"MADONNINA","lat":45.86272,"lon":10.189043},{"c":"8489","m":"GIANICO","l":"CAMPELLI","lat":45.848268,"lon":10.216748},{"c":"96254","m":"GIANICO","l":"GOI DI CAMPELLI","lat":45.847606,"lon":10.223247},{"c":"102189","m":"PIAN CAMUNO","l":"FORCELLA","lat":45.82359,"lon":10.18204},{"c":"13746","m":"PIAN CAMUNO","l":"FODESTAL-MAPP.2094-","lat":45.82348,"lon":10.1879},{"c":"13746","m":"PIAN CAMUNO","l":"CULEM","lat":45.82428,"lon":10.172859},{"c":"15693","m":"PIAN CAMUNO","l":"FODESTAL","lat":45.822705,"lon":10.186093},{"c":"18751","m":"PIAN CAMUNO","l":"CARECC-MAPP.430-","lat":45.837177,"lon":10.140459},{"c":"22408","m":"PIAN CAMUNO","l":"VOLPE","lat":45.835348,"lon":10.144941},{"c":"22408","m":"PIAN CAMUNO","l":"GARETTI","lat":45.838414,"lon":10.144682},{"c":"23709","m":"PIAN CAMUNO","l":"CANTIERI","lat":45.830403,"lon":10.172437},{"c":"2773","m":"PIAN CAMUNO","l":"VISSONE","lat":45.82899,"lon":10.165632},{"c":"497","m":"PIAN CAMUNO","l":"BOSCHE","lat":45.842631,"lon":10.129848},{"c":"59393","m":"PIAN CAMUNO","l":"PLAGNE","lat":45.831981,"lon":10.141239},{"c":"61761","m":"PIAN CAMUNO","l":"FODESTAL","lat":45.821693,"lon":10.187369},{"c":"74866","m":"PIAN CAMUNO","l":"DOSSO STRINAT","lat":45.825858,"lon":10.175977},{"c":"74866","m":"PIAN CAMUNO","l":"MALGA CAMPIONE","lat":45.812846,"lon":10.190578},{"c":"84652","m":"PIAN CAMUNO","l":"TAVOLE DI SOLATO","lat":45.834069,"lon":10.148372}];
+
+  // Inizializzazione mappa centrata sulla Bassa Valle Camonica
+  const map = L.map('map', { zoomControl: false }).setView([45.875, 10.205], 12);
+  L.control.zoom({ position: 'topright' }).addTo(map);
+
+  // Basemap: OpenStreetMap, Topografica (OpenTopoMap) e Satellitare (Esri)
+  const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; OpenStreetMap'
+  });
+
+  const topo = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+    maxZoom: 17,
+    attribution: '&copy; OpenTopoMap (CC-BY-SA)'
+  });
+
+  const satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    maxZoom: 19,
+    attribution: '&copy; Esri Satellite'
+  });
+
+  topo.addTo(map);
+  L.control.layers({
+    "Carta Topografica (Sentieri/Quote)": topo,
+    "Immagine Satellitare": satellite,
+    "Stradale OpenStreetMap": osm
+  }, null, { position: 'topright' }).addTo(map);
+
+  // Gruppi layer
+  const markersLayer = L.layerGroup().addTo(map);
+  const buffer100Layer = L.layerGroup();
+  const buffer200Layer = L.layerGroup();
+
+  const customIcon = L.divIcon({
+    className: 'capanno-icon',
+    iconSize: [14, 14],
+    iconAnchor: [7, 7],
+    popupAnchor: [0, -8]
+  });
+
+  // Riferimenti DOM
+  const comuneSelect = document.getElementById('comune-select');
+  const searchInput = document.getElementById('search-input');
+  const toggle100m = document.getElementById('toggle-100m');
+  const toggle200m = document.getElementById('toggle-200m');
+  const toggleLabels = document.getElementById('toggle-labels');
+  const listEl = document.getElementById('list');
+  const countBadge = document.getElementById('count-badge');
+  const sidebar = document.getElementById('sidebar');
+
+  function render() {
+    const selectedComune = comuneSelect.value;
+    const query = searchInput.value.trim().toLowerCase();
+    const showLabels = toggleLabels.checked;
+
+    markersLayer.clearLayers();
+    buffer100Layer.clearLayers();
+    buffer200Layer.clearLayers();
+    listEl.innerHTML = '';
+
+    const filtered = CAPANNI_DATA.filter(item => {
+      const matchComune = selectedComune === 'ALL' || item.m === selectedComune;
+      const matchQuery = !query ||
+        item.c.toLowerCase().includes(query) ||
+        item.l.toLowerCase().includes(query) ||
+        item.m.toLowerCase().includes(query);
+      return matchComune && matchQuery;
+    });
+
+    countBadge.textContent = filtered.length;
+
+    const bounds = [];
+
+    filtered.forEach(item => {
+      const latlng = [item.lat, item.lon];
+      bounds.push(latlng);
+
+      const marker = L.marker(latlng, { icon: customIcon });
+      
+      const googleMapsUrl = `https://www.google.com/maps?q=${item.lat},${item.lon}`;
+      const popupHtml = `
+        <div class="popup-title">Capanno N. ${item.c}</div>
+        <div class="popup-row"><strong>Comune:</strong> ${item.m}</div>
+        <div class="popup-row"><strong>Località:</strong> ${item.l || 'N.D.'}</div>
+        <div class="popup-row"><strong>Coord:</strong> ${item.lat.toFixed(6)}, ${item.lon.toFixed(6)}</div>
+        <a class="popup-link" href="${googleMapsUrl}" target="_blank" rel="noopener">Apri navigatore</a>
+      `;
+      marker.bindPopup(popupHtml);
+
+      if (showLabels) {
+        marker.bindTooltip(item.c, {
+          permanent: true,
+          direction: 'top',
+          offset: [0, -8],
+          className: 'capanno-label'
+        });
+      }
+
+      markersLayer.addLayer(marker);
+
+      // Cerchi di rispetto
+      L.circle(latlng, {
+        radius: 100,
+        color: '#d97706',
+        weight: 1.5,
+        fillColor: '#f59e0b',
+        fillOpacity: 0.15,
+        interactive: false
+      }).addTo(buffer100Layer);
+
+      L.circle(latlng, {
+        radius: 200,
+        color: '#c0392b',
+        weight: 1.2,
+        dashArray: '4,4',
+        fillColor: '#e74c3c',
+        fillOpacity: 0.08,
+        interactive: false
+      }).addTo(buffer200Layer);
+
+      // Elemento lista laterale
+      const row = document.createElement('div');
+      row.className = 'item';
+      row.innerHTML = `
+        <div class="item-top">
+          <span class="item-code">N. ${item.c}</span>
+          <span class="item-comune">${item.m}</span>
+        </div>
+        <div class="item-loc">${item.l || 'Località non specificata'}</div>
+        <div class="item-coords">${item.lat.toFixed(5)}, ${item.lon.toFixed(5)}</div>
+      `;
+      row.addEventListener('click', () => {
+        map.setView(latlng, 16);
+        marker.openPopup();
+        if (window.innerWidth <= 700) {
+          sidebar.classList.add('collapsed');
+        }
+      });
+      listEl.appendChild(row);
+    });
+
+    if (bounds.length > 0 && selectedComune !== 'ALL') {
+      map.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
+    }
+  }
+
+  // Eventi filtri
+  comuneSelect.addEventListener('change', render);
+  searchInput.addEventListener('input', render);
+  toggleLabels.addEventListener('change', render);
+
+  toggle100m.addEventListener('change', (e) => {
+    if (e.target.checked) buffer100Layer.addTo(map);
+    else map.removeLayer(buffer100Layer);
+  });
+
+  toggle200m.addEventListener('change', (e) => {
+    if (e.target.checked) buffer200Layer.addTo(map);
+    else map.removeLayer(buffer200Layer);
+  });
+
+  // Toggle Sidebar
+  document.getElementById('close-sidebar').addEventListener('click', () => {
+    sidebar.classList.add('collapsed');
+  });
+  document.getElementById('toggle-sidebar-btn').addEventListener('click', () => {
+    sidebar.classList.toggle('collapsed');
+  });
+
+  // Geolocalizzazione GPS sul campo
+  let userMarker = null;
+  document.getElementById('locate-btn').addEventListener('click', () => {
+    map.locate({ setView: true, maxZoom: 15 });
+  });
+  map.on('locationfound', (e) => {
+    if (userMarker) map.removeLayer(userMarker);
+    userMarker = L.circleMarker(e.latlng, {
+      radius: 8,
+      color: '#ffffff',
+      weight: 2,
+      fillColor: '#2563eb',
+      fillOpacity: 1
+    }).addTo(map).bindPopup('La tua posizione attuale').openPopup();
+  });
+  map.on('locationerror', () => {
+    alert('Impossibile rilevare la posizione GPS. Verifica i permessi del browser.');
+  });
+
+  // Avvio
+  render();
+</script>
+</body>
+</html>
